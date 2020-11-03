@@ -1,0 +1,41 @@
+# Database file, defaults to "persistence.db" in working directory
+#Database="persistence.db"
+
+# Imap host and port, mandatory
+ImapHost="imap.host.com:993"
+# Imap username, mandatory
+User="myself@host.com"
+# Imap password, mandatory. Make this file unreadable by anyone but yourself!
+Password="myverysecurepassword"
+
+# Spamassassin host and port, defaults to "127.0.0.1:783"
+#SpamassassinHost="127.0.0.1:783"
+
+# Dry run disables all write access to the mailbox, defaults to true
+#DryRun=true
+
+# configure spam checking
+# Whether mails classified as spam should be moved to SpamFolder, defaults to false
+#MoveSpam=false
+# Used in conjunction with MoveSpam
+#SpamFolder="Spam"
+# Whether mails classified as spam shoud be Deleted & Expunged, defaults to false
+#DeleteSpam=false
+
+# Whether the spam report should be appended to ReportFolder if a mail is classified as spam, defaults to false
+#AppendReports=false
+# Used in conjunction with AppendReports
+#ReportFolder="Spamassassin/Reports"
+
+# configure folders to check, defaults to ["INBOX"]
+# CheckFolders=["INBOX"]
+
+# configure learning
+# Whether to delete mails after learning them to spamassassin successfully, defaults to false
+#DeleteLearned=false
+# configure learn folders
+# Folders to learn spam from, defaults to empty
+#SpamLearnFolders=["LearnSpam"]
+# Folders to learn ham from, defaults to empty
+#HamLearnFolders=["LearnHam"]
+

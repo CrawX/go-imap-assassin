@@ -4,12 +4,23 @@
 *.dll
 *.so
 *.dylib
+go-imap-assassin
 
 # Test binary, built with `go test -c`
 *.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# IntelliJ project
+.idea
+
+# Database files created by running go-imap-assassin in this directory
+*.db
+*.db-*
+
+# Generated sources
+persistence/migrations/migrations.go
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
