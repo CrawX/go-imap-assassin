@@ -35,7 +35,7 @@ I'm working on this in my spare time and will address the remaining to-dos as ti
 - [x] Implement compatibility for IMAP servers without `MOVE` or `UIDPLUS`
 - [x] Do some basic testing with multiple imap servers
 - [ ] Add unit tests
-- [ ] Add basic CI/CD chain
+- [x] Add basic CI/CD chain
 - [ ] Add multiplatform release CI/CD using xgo
 - [ ] Document build steps
 - [ ] Document application code
