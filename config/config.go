@@ -2,8 +2,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -43,9 +44,46 @@ func ReadConfig(filename string) (*Config, error) {
 	}
 
 	_, err := toml.DecodeFile(filename, config)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil {
 		return nil, fmt.Errorf("could not read config file: %w", err)
 	}
 
+	err = config.validate()
+	if err != nil {
+		return nil, err
+	}
+
 	return config, nil
+}
+
+func (c *Config) validate() error {
+	if err := validateNonEmptyStringField(c.Database, "Database name must not be empty, set to a filename for the sqlite database"); err != nil {
+		return err
+	}
+
+	if err := validateNonEmptyStringField(c.ImapHost, "ImapHost must not be empty, set to host:port of the imap server"); err != nil {
+		return err
+	}
+
+	if err := validateNonEmptyStringField(c.User, "User must not be empty, set to username on the imap server"); err != nil {
+		return err
+	}
+
+	if err := validateNonEmptyStringField(c.Password, "Password must not be empty, set to password of User on the imap server"); err != nil {
+		return err
+	}
+
+	if err := validateNonEmptyStringField(c.SpamassassinHost, "SpamassassinHost must not be empty, set to host:port where spamassassin is reachable"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateNonEmptyStringField(field string, err string) error {
+	if len(strings.TrimSpace(field)) == 0 {
+		return errors.New(err)
+	}
+
+	return nil
 }

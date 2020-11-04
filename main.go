@@ -2,6 +2,8 @@
 package main
 
 import (
+	"flag"
+
 	"github.com/CrawX/go-imap-assassin/config"
 	"github.com/CrawX/go-imap-assassin/domain"
 	"github.com/CrawX/go-imap-assassin/imapassassin"
@@ -17,9 +19,12 @@ func main() {
 	log.InitLogging("debug")
 	logger := log.Logger(log.LOG_MAIN)
 
-	conf, err := config.ReadConfig("config.toml")
+	configFile := flag.String("config", "config.toml", "config file to load")
+	flag.Parse()
+
+	conf, err := config.ReadConfig(*configFile)
 	if err != nil {
-		logger.WithField("error", err).Fatal("Could not load config")
+		logger.WithFields(logrus.Fields{"error": err, "configfile": *configFile}).Fatal("Could not load config")
 	}
 
 	if conf.Loglevel != nil {
