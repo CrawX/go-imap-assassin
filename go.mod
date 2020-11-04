@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/emersion/go-imap v1.0.6
+	github.com/emersion/go-imap-compress v0.0.0-20201103190257-14809af1d1b9
 	github.com/emersion/go-imap-move v0.0.0-20190710073258-6e5a51a5b342
 	github.com/emersion/go-imap-uidplus v0.0.0-20200503180755-e75854c361e9
 	github.com/emersion/go-message v0.13.0
@@ -19,4 +20,8 @@ require (
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9 // indirect
 	golang.org/x/sys v0.0.0-20200930185726-fdedc70b468f // indirect
 	golang.org/x/text v0.3.3 // indirect
+)
+replace (
+ github.com/emersion/go-imap-compress => github.com/CrawX/go-imap-compress v0.0.0-20201103224223-121b9a329740
+ github.com/emersion/go-imap => github.com/CrawX/go-imap v1.0.7-0.20201103223916-4af87042edd6
 )
