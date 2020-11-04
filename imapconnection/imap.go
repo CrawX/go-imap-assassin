@@ -12,6 +12,7 @@ import (
 	"github.com/CrawX/go-imap-assassin/mail"
 
 	"github.com/emersion/go-imap"
+	"github.com/emersion/go-imap-compress"
 	"github.com/emersion/go-imap-move"
 	"github.com/emersion/go-imap-uidplus"
 	"github.com/emersion/go-imap/client"
@@ -31,6 +32,9 @@ type ImapConnection struct {
 }
 
 func NewImapConnection(server string, user string, password string) (*ImapConnection, error) {
+	logger := log.Logger(log.LOG_IMAP)
+	baseLogger := logger.WithFields(logrus.Fields{"server": server})
+
 	imapClient, err := client.DialTLS(server, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not dial to imap: %w", err)
@@ -39,6 +43,25 @@ func NewImapConnection(server string, user string, password string) (*ImapConnec
 	err = imapClient.Login(user, password)
 	if err != nil {
 		return nil, fmt.Errorf("could not login to imap: %w", err)
+	}
+
+	baseLogger.Debug("Logged in to server")
+
+	// Enable compression if possible
+	comp := compress.NewClient(imapClient)
+	compressOk, err := comp.SupportCompress(compress.Deflate)
+	if err != nil {
+		return nil, fmt.Errorf("could not probe for compression support: %w", err)
+	}
+
+	if compressOk {
+		baseLogger.Debug("Enabling COMPRESS")
+		err := comp.Compress(compress.Deflate)
+		if err != nil {
+			return nil, fmt.Errorf("could not enable compression support: %w", err)
+		}
+	} else {
+		baseLogger.Info("COMPRESS not supported on server, running without COMPRESS")
 	}
 
 	uidPlusClient := uidplus.NewClient(imapClient)
@@ -58,11 +81,8 @@ func NewImapConnection(server string, user string, password string) (*ImapConnec
 		server:     server,
 		user:       user,
 		password:   password,
-		l:          log.Logger(log.LOG_IMAP),
+		l:          logger,
 	}
-
-	baseLogger := conn.l.WithFields(logrus.Fields{"server": server})
-	baseLogger.Debug("Logged in to server")
 
 	if uidPlusSupported {
 		baseLogger.Debug("UIDPLUS supported on server, using UID delete")
