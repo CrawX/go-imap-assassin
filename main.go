@@ -3,14 +3,17 @@ package main
 
 import (
 	"flag"
+	"strings"
 
+	"github.com/CrawX/go-imap-assassin/classifier"
+	"github.com/CrawX/go-imap-assassin/classifier/rspamd"
+	"github.com/CrawX/go-imap-assassin/classifier/spamassassin"
 	"github.com/CrawX/go-imap-assassin/config"
 	"github.com/CrawX/go-imap-assassin/domain"
 	"github.com/CrawX/go-imap-assassin/imapassassin"
 	"github.com/CrawX/go-imap-assassin/imapconnection"
 	"github.com/CrawX/go-imap-assassin/log"
 	"github.com/CrawX/go-imap-assassin/persistence"
-	"github.com/CrawX/go-imap-assassin/spamassassin"
 
 	"github.com/sirupsen/logrus"
 )
@@ -37,9 +40,20 @@ func main() {
 	}
 	defer p.Close()
 
-	sa, err := spamassassin.NewSpamassassin(conf.SpamassassinHost)
-	if err != nil {
-		logger.WithField("error", err).Fatal("Could not start spamassassin connector")
+	var spamClassifier domain.SpamClassifier
+	if conf.SpamassassinHost != "" {
+		logger.WithFields(logrus.Fields{"classifier": "spamassassin", "spamassssinhost": conf.SpamassassinHost}).Info("Using SpamAssassin")
+		spamClassifier, err = spamassassin.NewSpamassassin(conf.SpamassassinHost)
+		if err != nil {
+			logger.WithField("error", err).Fatal("Could not start SpamAssassin connector")
+		}
+	} else {
+		controllerWithoutTrailingSlashes := strings.TrimRight(conf.RspamdController, "/")
+		logger.WithFields(logrus.Fields{"classifier": "rspamd", "rspamdcontroller": controllerWithoutTrailingSlashes}).Info("Using Rspamd")
+		spamClassifier, err = rspamd.NewRspamd(controllerWithoutTrailingSlashes, conf.RspamdPassword)
+		if err != nil {
+			logger.WithField("error", err).Fatal("Could not start rspamd connector")
+		}
 	}
 
 	imapConn, err := imapconnection.NewImapConnection(conf.ImapHost, conf.User, conf.Password)
@@ -67,7 +81,7 @@ func main() {
 		configs = append(configs, imapassassin.DeleteLearned())
 	}
 
-	sc, err := imapassassin.NewImapAssassin(p, sa, imapConn, configs...)
+	sc, err := imapassassin.NewImapAssassin(p, &classifier.GoRoutineSpamClassifier{SpamClassifier: spamClassifier}, imapConn, configs...)
 	if err != nil {
 		logger.WithField("error", err).Fatal("Could not start spamchecker")
 	}

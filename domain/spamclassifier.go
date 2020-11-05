@@ -15,9 +15,12 @@ type SpamResult struct {
 	Error  error
 }
 
-type Spamassassin interface {
+type SpamClassifier interface {
 	Check(rawMail []byte) *SpamResult
-	CheckAll(mails [][]byte, concurrency int) []*SpamResult
 	Learn(learnType LearnType, rawMail []byte) error
+}
+
+type ConcurrentSpamClassifier interface {
+	CheckAll(mails [][]byte, concurrency int) []*SpamResult
 	LearnAll(learnType LearnType, mails [][]byte, concurrency int) []error
 }

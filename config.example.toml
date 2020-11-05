@@ -8,8 +8,14 @@ User="myself@host.com"
 # Imap password, mandatory. Make this file unreadable by anyone but yourself!
 Password="myverysecurepassword"
 
-# Spamassassin host and port, defaults to "127.0.0.1:783"
+# set either SpamassassinHost and RspamdController and RspamdPassword to use either of these platforms
+# Spamassassin host and port
 #SpamassassinHost="127.0.0.1:783"
+
+# Rspamd controller url, eg http://localhost:11334, set RspamdPassword too
+#RspamdController="http://localhost:11334"
+# Rspamd controller password for /learnspam and /learnham endpoints
+#RspamdPassword="rspamdsecretpassword"
 
 # Dry run disables all write access to the mailbox, defaults to true
 #DryRun=true
