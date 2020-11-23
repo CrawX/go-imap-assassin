@@ -15,7 +15,7 @@ import (
 
 const (
 	BatchSize        = 50
-	CheckConcurrency = 16
+	CheckConcurrency = 6
 	LearnConcurrency = 8
 )
 
