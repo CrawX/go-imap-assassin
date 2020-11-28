@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package domain
 
+//go:generate mockgen -destination=mocks/imap.go -package=mocks . ImapConnector
 type RawImapMail struct {
 	Uid        uint32
 	Subject    string

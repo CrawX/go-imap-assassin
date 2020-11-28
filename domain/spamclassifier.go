@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
+//go:generate mockgen -destination=mocks/spamclassifier.go -package=mocks . SpamClassifier,ConcurrentSpamClassifier
 package domain
 
 type LearnType string

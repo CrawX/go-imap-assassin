@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package imapconnection
 
+//go:generate mockgen -destination=mover_mocks_test.go -package=imapconnection -source mover.go
 import (
 	"fmt"
 
 	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap-move"
 )
 
-type mover interface {
-	move(uids []uint32, folder string) error
-	moveReady() (error, error)
+type moveClient interface {
+	UidMove(seqset *imap.SeqSet, dest string) error
 }
 
 type moveMover struct {
-	moveClient *move.MoveClient
+	moveClient moveClient
 }
 
 func (m *moveMover) move(uids []uint32, folder string) error {
@@ -29,7 +28,7 @@ func (m *moveMover) moveReady() (error, error) {
 }
 
 type compatibilityMover struct {
-	imapConn *ImapConnection
+	imapConn copyAndDeleteMoveClient
 }
 
 func (c *compatibilityMover) move(uids []uint32, folder string) error {
@@ -44,12 +43,12 @@ func (c *compatibilityMover) move(uids []uint32, folder string) error {
 
 	seqset := &imap.SeqSet{}
 	seqset.AddNum(uids...)
-	err = c.imapConn.connection.UidCopy(seqset, folder)
+	err = c.imapConn.UidCopy(seqset, folder)
 	if err != nil {
 		return fmt.Errorf("could not copy mails: %w", err)
 	}
 
-	err = c.imapConn.mailDeleter.delete(uids)
+	err = c.imapConn.delete(uids)
 	if err != nil {
 		return fmt.Errorf("could not delete copied mails: %w", err)
 	}
@@ -58,5 +57,5 @@ func (c *compatibilityMover) move(uids []uint32, folder string) error {
 }
 
 func (c *compatibilityMover) moveReady() (error, error) {
-	return c.imapConn.mailDeleter.deleteReady()
+	return c.imapConn.deleteReady()
 }

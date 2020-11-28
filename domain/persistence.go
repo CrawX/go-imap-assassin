@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package domain
 
+//go:generate mockgen -destination=mocks/persistence.go -package=mocks . Persistence
 type ImapFolder struct {
 	Name        string
 	UidValidity uint32
