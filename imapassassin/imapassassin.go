@@ -160,26 +160,30 @@ func (ia *ImapAssassin) CheckSpam(folders []string) error {
 				}
 			}
 
-			// Only then mark the mails in the database
-			saveMails := []domain.SaveMail{}
-			for i, m := range mails {
-				result := spamResults[i]
-				saveMails = append(
-					saveMails,
-					domain.SaveMail{
-						Class:      domain.Checked,
-						Uid:        m.Uid,
-						MailIdHash: m.MailIdHash,
-						FolderName: f,
-						Subject:    m.Subject,
-						IsSpam:     &result.IsSpam,
-						Score:      &result.Score,
-					},
-				)
-			}
-			err = ia.persistence.SaveMails(saveMails)
-			if err != nil {
-				return fmt.Errorf("could not save mails: %w", err)
+			if !ia.configuration.DryRun {
+				// Only then mark the mails in the database
+				saveMails := []domain.SaveMail{}
+				for i, m := range mails {
+					result := spamResults[i]
+					saveMails = append(
+						saveMails,
+						domain.SaveMail{
+							Class:      domain.Checked,
+							Uid:        m.Uid,
+							MailIdHash: m.MailIdHash,
+							FolderName: f,
+							Subject:    m.Subject,
+							IsSpam:     &result.IsSpam,
+							Score:      &result.Score,
+						},
+					)
+				}
+				err = ia.persistence.SaveMails(saveMails)
+				if err != nil {
+					return fmt.Errorf("could not save mails: %w", err)
+				}
+			} else {
+				ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spam)}).Info("Not saving mails as seen in local database due to dry-run")
 			}
 
 			totalOk += len(ok)
@@ -276,17 +280,9 @@ func (ia *ImapAssassin) Learn(learnType domain.LearnType, folders []string) erro
 					},
 				)
 			}
-			err = ia.persistence.SaveMails(saveMails)
-			if err != nil {
-				return fmt.Errorf("could not save mail: %w", err)
-			}
 
-			baseFolderLogger.WithFields(logrus.Fields{"duration": time.Since(start), "batchsize": len(batch)}).Info("Learned batch")
-
-			if ia.configuration.DeleteLearned {
-				if ia.configuration.DryRun {
-					baseFolderLogger.Info("Not deleting learned mails due to dry-run")
-				} else {
+			if !ia.configuration.DryRun {
+				if ia.configuration.DeleteLearned {
 					baseFolderLogger.WithFields(logrus.Fields{"batchsize": len(batch)}).Debug("Deleting learned batch")
 					err = ia.imapConnection.Delete(batch)
 					if err != nil {
@@ -294,7 +290,22 @@ func (ia *ImapAssassin) Learn(learnType domain.LearnType, folders []string) erro
 					}
 					baseFolderLogger.WithFields(logrus.Fields{"duration": time.Since(start), "batchsize": len(batch)}).Info("Deleted learned batch")
 				}
+
+				err = ia.persistence.SaveMails(saveMails)
+				if err != nil {
+					return fmt.Errorf("could not save mail: %w", err)
+				}
+			} else {
+				if ia.configuration.DeleteLearned {
+					baseFolderLogger.Info("Not deleting learned mails due to dry-run")
+
+				}
+
+				ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(saveMails)}).Info("Not saving mails as seen in local database due to dry-run")
+
 			}
+
+			baseFolderLogger.WithFields(logrus.Fields{"duration": time.Since(start), "batchsize": len(batch)}).Info("Learned batch")
 		}
 
 		err = ia.persistence.SaveFolder(f, uidvalidity)
