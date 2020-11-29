@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - '*'
+    paths-ignore:
+      - 'docker/rspamd-go-imap-assassin/**'
   pull_request:
     branches:
       - master
