@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - '*'
+    paths-ignore:
+      - 'docker/rspamd-go-imap-assassin/**'
   pull_request:
     branches:
       - master
@@ -18,14 +20,14 @@ jobs:
       - uses: actions/setup-go@v2.1.3
 
       - name: Generate code
-        env:
-          GO111MODULE: "off"
         run: |
-          go get -u github.com/mjibson/esc
-          go install github.com/mjibson/esc
-          cd persistence/migrations
+          GO111MODULE="off" go get -u github.com/mjibson/esc
+          GO111MODULE="off" go install github.com/mjibson/esc
+          go get -u github.com/golang/mock/mockgen@v1.4.4
+          GO111MODULE="off" go get -u github.com/go-playground/generate
+          GO111MODULE="off" go install github.com/go-playground/generate
           export PATH=${PATH}:`go env GOPATH`/bin
-          go generate
+          generate -i $(pwd) -ignore='/\.'
 
       - uses: golangci/golangci-lint-action@v2
         with:
@@ -43,3 +45,16 @@ jobs:
       - name: Build binary
         run: |
           go build
+
+      - name: Build with xgo
+        uses: crazy-max/ghaction-xgo@v1
+        with:
+          xgo_version: latest
+          dest: build
+          targets: linux/386,linux/amd64,linux/arm-7,linux/arm64,linux/ppc64le,linux/s390x
+
+      - name: upload the build artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: go-imap-assassin
+          path: build

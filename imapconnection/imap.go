@@ -67,13 +67,22 @@ func NewImapConnection(server string, user string, password string) (*ImapConnec
 	if uidPlusSupported {
 		baseLogger.Debug("UIDPLUS supported on server, using UID delete")
 		conn.mailDeleter = &uidPlusDeleter{
-			imapConn:      conn,
-			uidplusClient: uidPlusClient,
+			imapConn: struct {
+				*ImapConnection
+				*uidplus.Client
+			}{
+				conn, uidPlusClient,
+			},
 		}
 	} else {
 		baseLogger.Info("UIDPLUS not supported on server, falling back to flag&expunge")
 		conn.mailDeleter = &compatibilityDeleter{
-			imapConn: conn,
+			imapConn: struct {
+				*ImapConnection
+				*client.Client
+			}{
+				conn, imapClient,
+			},
 		}
 	}
 
@@ -90,7 +99,12 @@ func NewImapConnection(server string, user string, password string) (*ImapConnec
 			baseLogger.Info("UIDPLUS not supported on server, falling back to flag&expunge for copy")
 		}
 		conn.mailMover = &compatibilityMover{
-			imapConn: conn,
+			imapConn: struct {
+				deleter
+				*client.Client
+			}{
+				conn.mailDeleter, imapClient,
+			},
 		}
 	}
 

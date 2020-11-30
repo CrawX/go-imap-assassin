@@ -18,6 +18,9 @@ type Config struct {
 
 	SpamassassinHost string
 
+	RspamdController string
+	RspamdPassword   string
+
 	DryRun bool
 
 	MoveSpam      bool
@@ -37,10 +40,9 @@ type Config struct {
 
 func ReadConfig(filename string) (*Config, error) {
 	config := &Config{
-		Database:         "persistence.db",
-		SpamassassinHost: "127.0.0.1:783",
-		CheckFolders:     []string{"INBOX"},
-		DryRun:           true,
+		Database:     "persistence.db",
+		CheckFolders: []string{"INBOX"},
+		DryRun:       true,
 	}
 
 	_, err := toml.DecodeFile(filename, config)
@@ -73,8 +75,19 @@ func (c *Config) validate() error {
 		return err
 	}
 
-	if err := validateNonEmptyStringField(c.SpamassassinHost, "SpamassassinHost must not be empty, set to host:port where spamassassin is reachable"); err != nil {
-		return err
+	spamassassinSet := len(strings.TrimSpace(c.SpamassassinHost)) > 0
+	rspamdSet := len(strings.TrimSpace(c.RspamdController)) > 0
+	if rspamdSet && spamassassinSet {
+		return fmt.Errorf("SpamassassinHost and RspamdController cannot be set at the same time")
+	}
+	if !spamassassinSet && !rspamdSet {
+		return fmt.Errorf("set either SpamassassinHost or RspamdController to use either classifier")
+	}
+
+	if rspamdSet {
+		if err := validateNonEmptyStringField(c.RspamdPassword, "RspamdPassword must be set if RspamdController is set"); err != nil {
+			return err
+		}
 	}
 
 	return nil

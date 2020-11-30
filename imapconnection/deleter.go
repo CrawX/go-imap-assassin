@@ -1,21 +1,24 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package imapconnection
 
+//go:generate mockgen -destination=deleter_mocks_test.go -package=imapconnection -source deleter.go
 import (
 	"fmt"
 
 	"github.com/emersion/go-imap"
-	"github.com/emersion/go-imap-uidplus"
 )
 
-type deleter interface {
-	delete([]uint32) error
-	deleteReady() (error, error)
+type deletedFlagger interface {
+	flagDeleted(uids []uint32) (*imap.SeqSet, error)
+}
+
+type deletedFlaggerAndUidExpunger interface {
+	deletedFlagger
+	UidExpunge(seqSet *imap.SeqSet, ch chan uint32) error
 }
 
 type uidPlusDeleter struct {
-	imapConn      *ImapConnection
-	uidplusClient *uidplus.Client
+	imapConn deletedFlaggerAndUidExpunger
 }
 
 func (u *uidPlusDeleter) delete(uids []uint32) error {
@@ -27,7 +30,7 @@ func (u *uidPlusDeleter) delete(uids []uint32) error {
 	out := make(chan uint32)
 	done := make(chan error, 1)
 	go func() {
-		done <- u.uidplusClient.UidExpunge(seqset, out)
+		done <- u.imapConn.UidExpunge(seqset, out)
 	}()
 
 	expunged := []uint32{}
@@ -52,8 +55,14 @@ func (u *uidPlusDeleter) deleteReady() (error, error) {
 	return nil, nil
 }
 
+type deleteFlaggerAndExpunger interface {
+	deletedFlagger
+	Expunge(ch chan uint32) error
+	UidSearch(criteria *imap.SearchCriteria) (uids []uint32, err error)
+}
+
 type compatibilityDeleter struct {
-	imapConn *ImapConnection
+	imapConn deleteFlaggerAndExpunger
 }
 
 func (c *compatibilityDeleter) delete(uids []uint32) error {
@@ -74,7 +83,7 @@ func (c *compatibilityDeleter) delete(uids []uint32) error {
 	out := make(chan uint32)
 	done := make(chan error, 1)
 	go func() {
-		done <- c.imapConn.connection.Expunge(out)
+		done <- c.imapConn.Expunge(out)
 	}()
 
 	expunged := []uint32{}
@@ -103,7 +112,7 @@ func (c *compatibilityDeleter) deleteReady() (error, error) {
 	// Get all UIDs in folder with DeletedFlag set
 	criteria := imap.NewSearchCriteria()
 	criteria.WithFlags = []string{imap.DeletedFlag}
-	ids, err := c.imapConn.connection.UidSearch(criteria)
+	ids, err := c.imapConn.UidSearch(criteria)
 	if err != nil {
 		return nil, fmt.Errorf("could search for deleted in folder: %w", err)
 	}
