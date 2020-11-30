@@ -35,10 +35,10 @@ I'm working on this in my spare time and will address the remaining to-dos as ti
 - [x] Implement filter training
 - [x] Implement compatibility for IMAP servers without `MOVE` or `UIDPLUS`
 - [x] Do some basic testing with multiple imap servers
-- [ ] Add unit tests
+- [x] Add unit tests
 - [x] Add basic CI/CD chain
 - [ ] Add multiplatform release CI/CD using xgo
-- [ ] Document build steps
+- [x] Document build steps
 - [ ] Document application code
 - [ ] Document setup steps (including `SpamAssassin` and `Rspamd` setup)
 - [ ] Document configuration
@@ -59,6 +59,58 @@ interpretations of the source code.
 | Maturity                      | Work in progress                                                          | Stable with considerable userbase                                                             |
 | Tests                         | Work in progress                                                          | Unit tests                                                                                    |
 | Maintainership & community    | Maintained and used by @CrawX                                             | Maintained by multiple people, mostly by @baldurmen, community which reports and fixes bugs   |
+
+## Build instructions
+`go-imap-assassin` uses [go-sqlite3](https://github.com/mattn/go-sqlite3) which is a cgo-enabled package.
+You'll need a working c compiler like gcc to build `go-imap-assassin`.
+
+```sh
+# install asset generation
+GO111MODULE="off" go get -u github.com/mjibson/esc
+GO111MODULE="off" go install github.com/mjibson/esc
+
+# download sources
+git clone 'https://github.com/CrawX/go-imap-assassin.git'
+cd go-imap-assassin
+# generate migration assets
+cd persistence/migrations
+go generate
+cd ../..
+# download dependecies & build go-imap-assassin
+go mod download
+go build
+```
+
+## Rspamd setup
+The following `docker-compose.yml` can be used as a starting point to deploy a docker-based installation of rspamd to
+use with `go-imap-assassin`.
+
+Generate your rspamd admin password to store in `worker-controller.inc` as described in the [rspamd image documentation](https://github.com/a16bitsysop/docker-rspamd).
+
+```yaml
+version: "3.8"
+
+services:
+  unbound:
+    image: klutchell/unbound:latest
+
+  dccifd:
+    image: a16bitsysop/dccifd:latest
+
+  redis:
+    image: redis:latest
+    volumes:
+      - MY-ABSOLUTE-REDIS-DATA-DIR:/data
+
+  rspamd:
+    image: crawxx/rspamd-go-imap-assassin
+    volumes:
+      - MY-ABSOLUTE-RSPAMD-DATA-DIR:/var/lib/rspamd
+      - MY-GENERATED-worker-controller.inc:/etc/rspamd/override.d/worker-controller.inc
+    ports:
+      - "11332:11332"
+      - "11334:11334"
+```
 
 
 ## Acknowledgements
