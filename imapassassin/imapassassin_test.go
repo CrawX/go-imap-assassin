@@ -3,6 +3,7 @@ package imapassassin
 
 import (
 	"io/ioutil"
+	"strconv"
 	"testing"
 
 	"github.com/CrawX/go-imap-assassin/domain"
@@ -48,9 +49,9 @@ func setupThreeMails(t *testing.T, cfg *configuration) (*gomock.Controller, *Ima
 	imapConnection.EXPECT().
 		FetchMails(gomock.Eq(u32a(3, 2, 1))).
 		Return([]*domain.RawImapMail{
-			{Uid: 1, RawMail: []byte{1}},
-			{Uid: 2, RawMail: []byte{2}},
-			{Uid: 3, RawMail: []byte{3}},
+			{Uid: 1, RawMail: []byte{1}, MailIdHash: "1"},
+			{Uid: 2, RawMail: []byte{2}, MailIdHash: "2"},
+			{Uid: 3, RawMail: []byte{3}, MailIdHash: "3"},
 		}, nil)
 
 	return ctrl, assassin, persistence, classifier, imapConnection
@@ -95,8 +96,12 @@ func TestImapAssassin_CheckSpamDryRun(t *testing.T) {
 		Return([]*domain.SpamResult{{IsSpam: true}, {IsSpam: true}, {IsSpam: true}})
 
 	persistence.EXPECT().
-		SaveFolder(TEST_FOLDER_1, u32(123)).
+		SaveFolder(gomock.Eq(TEST_FOLDER_1), gomock.Eq(u32(123))).
 		Return(nil)
+
+	persistence.EXPECT().
+		HashesExist(gomock.Eq(domain.LearnedHam), gomock.Eq([]string{"1", "2", "3"})).
+		Return(map[string]bool{"1": false, "2": false, "3": true}, nil)
 
 	err := assassin.CheckSpam([]string{TEST_FOLDER_1})
 	assert.NoError(t, err)
@@ -113,6 +118,10 @@ func TestImapAssassin_CheckSpamDelete(t *testing.T) {
 	classifier.EXPECT().
 		CheckAll(gomock.Eq([][]byte{{1}, {2}, {3}}), gomock.Eq(6)).
 		Return([]*domain.SpamResult{{IsSpam: true, Score: 10}, {IsSpam: false}, {IsSpam: true, Score: 10}})
+
+	persistence.EXPECT().
+		HashesExist(gomock.Eq(domain.LearnedHam), gomock.Eq([]string{"1", "3"})).
+		Return(map[string]bool{"1": false, "3": false}, nil)
 
 	imapConnection.EXPECT().
 		DeleteReady().
@@ -155,6 +164,10 @@ func TestImapAssassin_CheckSpamMove(t *testing.T) {
 	classifier.EXPECT().
 		CheckAll(gomock.Eq([][]byte{{1}, {2}, {3}}), gomock.Eq(6)).
 		Return([]*domain.SpamResult{{IsSpam: true, Score: 10}, {IsSpam: false}, {IsSpam: true, Score: 10}})
+
+	persistence.EXPECT().
+		HashesExist(gomock.Eq(domain.LearnedHam), gomock.Eq([]string{"1", "3"})).
+		Return(map[string]bool{"1": false, "3": false}, nil)
 
 	imapConnection.EXPECT().
 		MoveReady().
@@ -200,6 +213,10 @@ func TestImapAssassin_CheckSpamReport(t *testing.T) {
 		CheckAll(gomock.Eq([][]byte{{1}, {2}, {3}}), gomock.Eq(6)).
 		Return([]*domain.SpamResult{{IsSpam: true, Score: 10, Body: []byte{0xa}}, {IsSpam: false}, {IsSpam: true, Score: 10, Body: []byte{0xc}}})
 
+	persistence.EXPECT().
+		HashesExist(gomock.Eq(domain.LearnedHam), gomock.Eq([]string{"1", "3"})).
+		Return(map[string]bool{"1": false, "3": false}, nil)
+
 	imapConnection.EXPECT().
 		Put(gomock.Eq([]byte{0xa}), gomock.Eq("reports")).
 		Return(nil)
@@ -221,6 +238,51 @@ func TestImapAssassin_CheckSpamReport(t *testing.T) {
 			)
 
 			return nil
+		})
+
+	persistence.EXPECT().
+		SaveFolder(TEST_FOLDER_1, u32(123)).
+		Return(nil)
+
+	err := assassin.CheckSpam([]string{TEST_FOLDER_1})
+	assert.NoError(t, err)
+}
+
+func TestImapAssassin_CheckSpamDeleteIgnoreLearnedHam(t *testing.T) {
+	ctrl, assassin, persistence, classifier, imapConnection := setupThreeMails(t,
+		&configuration{
+			DeleteSpam: true,
+		},
+	)
+	defer ctrl.Finish()
+
+	classifier.EXPECT().
+		CheckAll(gomock.Eq([][]byte{{1}, {2}, {3}}), gomock.Eq(6)).
+		Return([]*domain.SpamResult{{IsSpam: true, Score: 10}, {IsSpam: false}, {IsSpam: true, Score: 10}})
+
+	persistence.EXPECT().
+		HashesExist(gomock.Eq(domain.LearnedHam), gomock.Eq([]string{"1", "3"})).
+		Return(map[string]bool{"1": false, "3": true}, nil)
+
+	imapConnection.EXPECT().
+		DeleteReady().
+		Return(nil, nil)
+
+	imapConnection.EXPECT().
+		Delete(gomock.Eq(u32a(1))).
+		Return(nil)
+
+	persistence.EXPECT().
+		SaveMails(gomock.Any()).
+		Do(func(mails []domain.SaveMail) {
+			assert.ElementsMatch(t,
+				mails,
+				[]domain.SaveMail{
+					saveMail(domain.Checked, 1, TEST_FOLDER_1, b(true), f(10)),
+					saveMail(domain.Checked, 2, TEST_FOLDER_1, b(false), f(0)),
+					saveMail(domain.Checked, 3, TEST_FOLDER_1, b(true), f(10)),
+				},
+			)
 		})
 
 	persistence.EXPECT().
@@ -439,11 +501,11 @@ func TestImapAssassin_getNewMailUids(t *testing.T) {
 					}
 
 					if known > -1 {
-						persistence.EXPECT().FindMailByHash(gomock.Eq(domain.Checked), gomock.Eq(tc.folder), gomock.Eq(hash)).
+						persistence.EXPECT().FindMailByFolderHash(gomock.Eq(domain.Checked), gomock.Eq(tc.folder), gomock.Eq(hash)).
 							Return(&domain.SavedImapMail{Id: int64(known)}, nil)
 						persistence.EXPECT().UpdateUid(gomock.Eq(int64(known)), gomock.Eq(uid))
 					} else {
-						persistence.EXPECT().FindMailByHash(gomock.Eq(domain.Checked), gomock.Eq(tc.folder), gomock.Eq(hash)).
+						persistence.EXPECT().FindMailByFolderHash(gomock.Eq(domain.Checked), gomock.Eq(tc.folder), gomock.Eq(hash)).
 							Return(nil, nil)
 					}
 				}
@@ -505,7 +567,7 @@ func saveMail(class domain.MailClass, uid uint32, folderName string, isSpam *boo
 	return domain.SaveMail{
 		Class:      class,
 		Uid:        uid,
-		MailIdHash: "",
+		MailIdHash: strconv.Itoa(int(uid)),
 		FolderName: folderName,
 		Subject:    "",
 		IsSpam:     isSpam,

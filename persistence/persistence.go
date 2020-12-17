@@ -154,7 +154,7 @@ func (p *Persistence) GetMailsInFolder(class domain.MailClass, folder string) ([
 	return messages, nil
 }
 
-func (p *Persistence) FindMailByHash(class domain.MailClass, folder string, mailIdHash string) (*domain.SavedImapMail, error) {
+func (p *Persistence) FindMailByFolderHash(class domain.MailClass, folder string, mailIdHash string) (*domain.SavedImapMail, error) {
 	dbMail := struct {
 		Id         int64
 		Class      int
@@ -191,6 +191,42 @@ func (p *Persistence) FindMailByHash(class domain.MailClass, folder string, mail
 		IsSpam:     dbMail.IsSpam,
 		Score:      dbMail.Score,
 	}, nil
+}
+
+func (p *Persistence) HashesExist(class domain.MailClass, mailIdHashes []string) (map[string]bool, error) {
+	qry, args, err := sqlx.Named(
+		"SELECT mailidhash from messages WHERE class = :class AND mailidhash IN (:hashes)",
+		map[string]interface{}{
+			"class":  int(class),
+			"hashes": mailIdHashes,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not create query: %w", err)
+	}
+
+	qry, args, err = sqlx.In(qry, args...)
+	if err != nil {
+		return nil, fmt.Errorf("could not replace IN in query: %w", err)
+	}
+
+	hashes := []string{}
+	err = p.db.Select(
+		&hashes,
+		qry,
+		args...,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("could not query db: %w", err)
+	}
+
+	result := map[string]bool{}
+	for _, hash := range hashes {
+		result[hash] = true
+	}
+
+	return result, nil
 }
 
 func (p *Persistence) UpdateUid(id int64, uid uint32) error {

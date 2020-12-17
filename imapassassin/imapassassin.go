@@ -112,7 +112,7 @@ func (ia *ImapAssassin) CheckSpam(folders []string) error {
 			spamResults := ia.spamClassifier.CheckAll(rawMails, CheckConcurrency)
 
 			// Split spam and ham, append reports
-			ok, spam := []uint32{}, []uint32{}
+			ok, spam := []*domain.RawImapMail{}, []*domain.RawImapMail{}
 			for i, m := range mails {
 				result := spamResults[i]
 				if result.Error != nil {
@@ -121,7 +121,7 @@ func (ia *ImapAssassin) CheckSpam(folders []string) error {
 
 				ia.l.WithFields(logrus.Fields{"folder": f, "subject": mail.ShortSubject(m.Subject), "isSpam": result.IsSpam, "score": result.Score}).Debug("Checked mail")
 				if result.IsSpam {
-					spam = append(spam, m.Uid)
+					spam = append(spam, m)
 					if !ia.configuration.DryRun {
 						if ia.configuration.AppendReports {
 							ia.l.WithFields(logrus.Fields{"folder": f, "subject": mail.ShortSubject(m.Subject), "score": result.Score}).Info("Appending spam report")
@@ -135,28 +135,58 @@ func (ia *ImapAssassin) CheckSpam(folders []string) error {
 					}
 				} else {
 					// No spam
-					ok = append(ok, m.Uid)
+					ok = append(ok, m)
 				}
 			}
 
+			ignoredSpam := []*domain.RawImapMail{}
 			// Move spam mail
 			if len(spam) > 0 {
-				if !ia.configuration.DryRun {
-					if ia.configuration.MoveSpam {
-						ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spam), "destination": ia.configuration.SpamFolder}).Info("Moving spam mails")
-						err = ia.imapConnection.Move(spam, ia.configuration.SpamFolder)
-						if err != nil {
-							return fmt.Errorf(`Could not move spam: %w`, err)
-						}
-					} else if ia.configuration.DeleteSpam {
-						ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spam)}).Info("Deleting spam mails")
-						err = ia.imapConnection.Delete(spam)
-						if err != nil {
-							return fmt.Errorf(`Could not delete spam: %w`, err)
-						}
+				action := "deleting"
+				if ia.configuration.MoveSpam {
+					action = "moving"
+				}
+
+				// Filter mailids that have been learned as ham so they're not moved/deleted a second time when the user
+				// moved them back to the inbox after being classified as a false positive
+				spamMailIdHashes := []string{}
+				for _, m := range spam {
+					spamMailIdHashes = append(spamMailIdHashes, m.MailIdHash)
+				}
+
+				spamUids := []uint32{}
+				learnedAsHam, err := ia.persistence.HashesExist(domain.LearnedHam, spamMailIdHashes)
+				if err != nil {
+					return fmt.Errorf("Could not check if spam mail is known as learned: %w", err)
+				}
+
+				for _, m := range spam {
+					if learnedAsHam[m.MailIdHash] {
+						ia.l.WithFields(logrus.Fields{"folder": f, "subject": mail.ShortSubject(m.Subject), "action": action}).Info("Ignoring spam categorization, mail has been learned as ham")
+						ignoredSpam = append(ignoredSpam, m)
+					} else {
+						spamUids = append(spamUids, m.Uid)
 					}
-				} else {
-					ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spam)}).Info("Not moving or deleting spam mails due to dry-run")
+				}
+
+				if len(spamUids) > 0 {
+					if !ia.configuration.DryRun {
+						if ia.configuration.MoveSpam {
+							ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spamUids), "destination": ia.configuration.SpamFolder}).Info("Moving spam mails")
+							err = ia.imapConnection.Move(spamUids, ia.configuration.SpamFolder)
+							if err != nil {
+								return fmt.Errorf(`Could not move spam: %w`, err)
+							}
+						} else if ia.configuration.DeleteSpam {
+							ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spamUids)}).Info("Deleting spam mails")
+							err = ia.imapConnection.Delete(spamUids)
+							if err != nil {
+								return fmt.Errorf(`Could not delete spam: %w`, err)
+							}
+						}
+					} else {
+						ia.l.WithFields(logrus.Fields{"folder": f, "spam": len(spam)}).Info("Not moving or deleting spam mails due to dry-run")
+					}
 				}
 			}
 
@@ -188,7 +218,7 @@ func (ia *ImapAssassin) CheckSpam(folders []string) error {
 
 			totalOk += len(ok)
 			totalSpam += len(spam)
-			ia.l.WithFields(logrus.Fields{"duration": time.Since(start), "batchsize": len(batch), "ok": len(ok), "spam": len(spam)}).Info("Checked batch")
+			ia.l.WithFields(logrus.Fields{"duration": time.Since(start), "batchsize": len(batch), "ok": len(ok), "spam": len(spam), "ignoredSpam": len(ignoredSpam)}).Info("Checked batch")
 		}
 
 		err = ia.persistence.SaveFolder(f, uidvalidity)
@@ -345,7 +375,7 @@ func (ia *ImapAssassin) getNewMailUids(folder string, class domain.MailClass, kn
 		}
 
 		for _, m := range mailIds {
-			knownMail, err := ia.persistence.FindMailByHash(class, folder, m.MailIdHash)
+			knownMail, err := ia.persistence.FindMailByFolderHash(class, folder, m.MailIdHash)
 			if err != nil {
 				return nil, fmt.Errorf("could not lookup mail via mailIdHash: %w", err)
 			}

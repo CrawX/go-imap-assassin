@@ -41,7 +41,8 @@ type Persistence interface {
 	AllFolders() ([]*ImapFolder, error)
 	SaveFolder(name string, uidValidity uint32) error
 	GetMailsInFolder(class MailClass, folder string) ([]*SavedImapMail, error)
-	FindMailByHash(class MailClass, folder string, mailIdHash string) (*SavedImapMail, error)
+	FindMailByFolderHash(class MailClass, folder string, mailIdHash string) (*SavedImapMail, error)
+	HashesExist(class MailClass, mailIdHashes []string) (map[string]bool, error)
 	UpdateUid(id int64, uid uint32) error
 	SaveMails(mails []SaveMail) error
 }
