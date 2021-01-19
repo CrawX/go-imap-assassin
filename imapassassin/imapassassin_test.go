@@ -97,7 +97,7 @@ func TestImapAssassin_CheckSpamDryRun(t *testing.T) {
 
 	persistence.EXPECT().
 		SaveFolder(gomock.Eq(TEST_FOLDER_1), gomock.Eq(u32(123))).
-		Return(nil)
+		Return(nil).Times(2)
 
 	persistence.EXPECT().
 		HashesExist(gomock.Eq(domain.LearnedHam), gomock.Eq([]string{"1", "2", "3"})).
@@ -146,7 +146,8 @@ func TestImapAssassin_CheckSpamDelete(t *testing.T) {
 
 	persistence.EXPECT().
 		SaveFolder(TEST_FOLDER_1, u32(123)).
-		Return(nil)
+		Return(nil).
+		Times(2)
 
 	err := assassin.CheckSpam([]string{TEST_FOLDER_1})
 	assert.NoError(t, err)
@@ -194,7 +195,8 @@ func TestImapAssassin_CheckSpamMove(t *testing.T) {
 
 	persistence.EXPECT().
 		SaveFolder(TEST_FOLDER_1, u32(123)).
-		Return(nil)
+		Return(nil).
+		Times(2)
 
 	err := assassin.CheckSpam([]string{TEST_FOLDER_1})
 	assert.NoError(t, err)
@@ -242,7 +244,8 @@ func TestImapAssassin_CheckSpamReport(t *testing.T) {
 
 	persistence.EXPECT().
 		SaveFolder(TEST_FOLDER_1, u32(123)).
-		Return(nil)
+		Return(nil).
+		Times(2)
 
 	err := assassin.CheckSpam([]string{TEST_FOLDER_1})
 	assert.NoError(t, err)
@@ -287,7 +290,8 @@ func TestImapAssassin_CheckSpamDeleteIgnoreLearnedHam(t *testing.T) {
 
 	persistence.EXPECT().
 		SaveFolder(TEST_FOLDER_1, u32(123)).
-		Return(nil)
+		Return(nil).
+		Times(2)
 
 	err := assassin.CheckSpam([]string{TEST_FOLDER_1})
 	assert.NoError(t, err)
@@ -309,7 +313,8 @@ func TestImapAssassin_LearnDryRun(t *testing.T) {
 
 			persistence.EXPECT().
 				SaveFolder(TEST_FOLDER_1, u32(123)).
-				Return(nil)
+				Return(nil).
+				Times(2)
 
 			err := assassin.Learn(learnType, []string{TEST_FOLDER_1})
 			assert.NoError(t, err)
@@ -355,7 +360,8 @@ func TestImapAssassin_LearnNoDelete(t *testing.T) {
 
 			persistence.EXPECT().
 				SaveFolder(TEST_FOLDER_1, u32(123)).
-				Return(nil)
+				Return(nil).
+				Times(2)
 
 			err := assassin.Learn(tc.learnType, []string{TEST_FOLDER_1})
 			assert.NoError(t, err)
@@ -411,7 +417,8 @@ func TestImapAssassin_LearnDelete(t *testing.T) {
 
 			persistence.EXPECT().
 				SaveFolder(TEST_FOLDER_1, u32(123)).
-				Return(nil)
+				Return(nil).
+				Times(2)
 
 			err := assassin.Learn(tc.learnType, []string{TEST_FOLDER_1})
 			assert.NoError(t, err)
@@ -423,9 +430,10 @@ func TestImapAssassin_getNewMailUids(t *testing.T) {
 	tests := []struct {
 		name string
 
-		folder       string
-		knownFolders []*domain.ImapFolder
-		uidValidity  uint32
+		folder        string
+		folderIsKnown bool
+		knownFolders  []*domain.ImapFolder
+		uidValidity   uint32
 
 		imapUids []uint32
 
@@ -438,7 +446,7 @@ func TestImapAssassin_getNewMailUids(t *testing.T) {
 	}{
 		{
 			"unknownfolder",
-			TEST_FOLDER_1, imapFolder(TEST_FOLDER_2, 123), 123,
+			TEST_FOLDER_1, false, imapFolder(TEST_FOLDER_2, 123), 123,
 			u32a(1, 2),
 			nil,
 			nil, nil,
@@ -446,7 +454,7 @@ func TestImapAssassin_getNewMailUids(t *testing.T) {
 		},
 		{
 			"knownfolder_uidvalidity_unchanged",
-			TEST_FOLDER_1, imapFolder(TEST_FOLDER_1, 123), 123,
+			TEST_FOLDER_1, true, imapFolder(TEST_FOLDER_1, 123), 123,
 			u32a(1, 2, 3),
 			u32a(1, 3),
 			nil, nil,
@@ -454,7 +462,7 @@ func TestImapAssassin_getNewMailUids(t *testing.T) {
 		},
 		{
 			"knownfolder_uidvalidity_changed",
-			TEST_FOLDER_1, imapFolder(TEST_FOLDER_1, 123), 124,
+			TEST_FOLDER_1, true, imapFolder(TEST_FOLDER_1, 123), 124,
 			u32a(1, 2, 3),
 			nil,
 			map[string]uint32{"a": 1, "b": 2, "c": 3}, []string{"a", "c"},
@@ -476,6 +484,13 @@ func TestImapAssassin_getNewMailUids(t *testing.T) {
 			}
 
 			imapConnection.EXPECT().ListUids().Return(tc.imapUids, nil)
+
+			// unknown folder
+			if !tc.folderIsKnown {
+				persistence.EXPECT().
+					SaveFolder(tc.folder, tc.uidValidity).
+					Return(nil)
+			}
 
 			// known & uidvalidity unchanged
 			if tc.knownUids != nil {

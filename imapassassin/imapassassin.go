@@ -392,6 +392,12 @@ func (ia *ImapAssassin) getNewMailUids(folder string, class domain.MailClass, kn
 		}
 	} else {
 		ia.l.WithFields(logrus.Fields{"folder": folder}).Debug("Folder is a previously unknown folder, no diff possible")
+		// If the folder is a new folder, make sure that a folder entry is created so partial/initial runs on a huge folder
+		// can resume properly after unexpected exits
+		err = ia.persistence.SaveFolder(folder, uidValidity)
+		if err != nil {
+			return nil, fmt.Errorf("could not create folder entry for %s: %w", folder, err)
+		}
 	}
 
 	sort.Slice(newMails, func(i, j int) bool { return newMails[i] > newMails[j] })
